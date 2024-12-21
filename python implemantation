@@ -1,0 +1,93 @@
+from PyQt6 import QtWidgets, uic
+import re
+import psycopg2
+
+def est_email_valide(email):
+    modele = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(modele, email) is not None
+
+# Fonction pour valider le numéro de téléphone
+def est_numero_valide(numero):
+    return len(numero) >= 8 and len(numero) <= 11 and numero.isdigit()
+
+def connecter_db():
+    try:
+        print("Tentative de connexion à la base de données...")
+        conn = psycopg2.connect(
+            host="localhost",        # Hôte du serveur PostgreSQL
+            database="clientsdb",    # Nom de la base de données
+            user="postgres",         # Votre nom d'utilisateur PostgreSQL
+            password="97180565.Hi"   # Votre mot de passe PostgreSQL
+        )
+        print("Connexion réussie à la base de données.")
+        return conn
+    except Exception as e:
+        print(f"Erreur de connexion à la base de données : {e}")
+        QtWidgets.QMessageBox.critical(None, "Erreur", f"Problème de connexion à la base de données : {e}")
+        return None
+
+# Fonction pour enregistrer un client dans la base de données
+def enregistrer_client(nom, prenom, email, numero_telephone):
+    conn = connecter_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            print("Connexion réussie, préparation de la requête SQL.")
+            # Exécution de la requête SQL
+            cursor.execute('''INSERT INTO clients (nom, prenom, email, numero_telephone)
+                              VALUES (%s, %s, %s, %s)''', (nom, prenom, email, numero_telephone))
+            conn.commit()
+            print("Client enregistré avec succès!")
+        except Exception as e:
+            print(f"Erreur lors de l'exécution de la requête SQL : {e}")
+            QtWidgets.QMessageBox.critical(None, "Erreur", f"Problème lors de l'insertion dans la base de données : {e}")
+        finally:
+            conn.close()
+            print("Connexion à la base de données fermée.")
+
+class ClientApp(QtWidgets.QMainWindow):
+    def __init__(self):
+        super().__init__()
+        uic.loadUi("Kunden.ui", self)  # Charger l'interface .ui générée
+        self.Regestrieren.clicked.connect(self.enregistrer)  # Connecter le bouton d'enregistrement
+
+    def enregistrer(self):
+        # Récupérer les données depuis les champs de saisie
+        nom = self.Nachname.text().strip()
+        prenom = self.Vorname.text().strip()
+        email = self.email.text().strip()
+        numero_telephone = self.Handynummer.text().strip()
+        
+        # Vérifier si l'email doit être pris en compte
+        if self.checkbox_notifications.isChecked() and email and not est_email_valide(email):
+            QtWidgets.QMessageBox.critical(self, "Erreur", "L'adresse e-mail est invalide.")
+            return
+        
+        # Validation des autres champs
+        if not nom or not prenom:
+            QtWidgets.QMessageBox.critical(self, "Erreur", "Le nom et le prénom sont obligatoires.")
+            return
+        if not est_numero_valide(numero_telephone):
+            QtWidgets.QMessageBox.critical(self, "Erreur", "Le numéro de téléphone est invalide.")
+            return
+        
+        # Si la case à cocher n'est pas sélectionnée, on laisse email comme vide (NULL)
+        if not self.checkbox_notifications.isChecked():
+            email = None
+        
+        # Enregistrer le client dans la base de données
+        enregistrer_client(nom, prenom, email, numero_telephone)
+        
+        # Affichage du message de confirmation
+        message = f"Nom: {nom}\nPrénom: {prenom}\nE-mail: {email if email else 'Aucun'}\nNuméro de téléphone: {numero_telephone}"
+        QtWidgets.QMessageBox.information(self, "Succès", f"Client enregistré avec succès!\n{message}")
+
+# Lancer l'application
+def main():
+    app = QtWidgets.QApplication([])
+    window = ClientApp()
+    window.show()
+    app.exec()
+
+if __name__ == "__main__":
+    main()
